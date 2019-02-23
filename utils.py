@@ -5,6 +5,48 @@ import os
 import keras
 from keras.applications.vgg16 import preprocess_input
 import keras.backend as K
+import pandas as pd
+from sklearn.utils import shuffle
+
+
+def get_data(idx_validate):
+    split_idx = (np.asarray([0, 2400, 5160, 7920, 10080, 11880, 13440])*5).tolist()
+    data = pd.read_excel('./imgPaths_labels_isSensor_new.xlsx')
+    paths, labels, sensor = data['img_path'], data['label'], data['sensor']
+    paths = np.squeeze(np.asarray(paths)).tolist()
+    labels = np.squeeze(np.asarray(labels)).tolist()
+    sensor = np.squeeze(np.asarray(sensor)).tolist()
+    train_paths = paths[:split_idx[idx_validate-1]] + paths[split_idx[idx_validate]:]
+    test_paths = paths[split_idx[idx_validate-1]:split_idx[idx_validate]]
+    train_labels = labels[:split_idx[idx_validate-1]] + labels[split_idx[idx_validate]:]
+    test_labels = labels[split_idx[idx_validate-1]:split_idx[idx_validate]]
+    train_sensor = sensor[:split_idx[idx_validate-1]] + sensor[split_idx[idx_validate]:]
+    test_sensor = sensor[split_idx[idx_validate-1]:split_idx[idx_validate]]
+
+    test_paths = np.asarray(test_paths).reshape(len(test_paths), 1)
+    test_labels= np.asarray(test_labels).reshape(len(test_labels), 1)
+
+    idx_real = np.where(np.asarray(test_sensor) == 1)
+    idx_test = np.loadtxt('./indices/indices_test_or_5_val_{}.txt'.format(idx_validate)).astype(int)
+    test_paths_real = test_paths[idx_real]
+    test_labels_real = test_labels[idx_real]
+    test_paths_for_test = np.squeeze(test_paths[idx_test]).tolist()
+    test_labels_for_test = np.squeeze(test_labels[idx_test]).tolist()
+    idx_val = np.loadtxt('./indices/indices_rand_val_no_5_val_{}.txt'.format(idx_validate)).astype(int)
+    validate_paths = test_paths[idx_val]
+    validate_labels = test_labels[idx_val]
+
+    test_paths = np.squeeze(test_paths).tolist()
+    test_labels = np.squeeze(test_labels).tolist()
+    test_paths_real = np.squeeze(test_paths_real).tolist()
+    test_labels_real = np.squeeze(test_labels_real).tolist()
+
+    validate_paths, validate_labels = np.squeeze(validate_paths).tolist(), np.squeeze(validate_labels).tolist()
+
+    idx_train_rand = shuffle(range(len(train_labels)))
+    train_paths = np.asarray(train_paths)[idx_train_rand].tolist()
+    train_labels = np.asarray(train_labels)[idx_train_rand].tolist()
+    return train_paths, train_labels, validate_paths, validate_labels, test_paths, test_labels, test_paths_real, test_labels_real, test_paths_for_test, test_labels_for_test
 
 
 def generate_generator(img_paths, labels, batch_size=32, net='inceptionV4', reverse=False):
@@ -112,25 +154,54 @@ class LossHistory(keras.callbacks.Callback):
         self.losses.append(logs.get('loss'))
 
 
-class SaveModelOnMAPE(keras.callbacks.Callback):
+class SaveModelOnMAPE_1(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs={}):
         self.MAPE = round(logs.get('val_loss'), 3)
         if self.MAPE < 30 or 1:
-            self.model.save_weights(os.path.join('weights_new', self.model.name, self.model.name + '_MAPE_epoch' + str(epoch) + '_MAPE' + str(self.MAPE) + '.hdf5'))
+            self.model.save_weights(os.path.join('weights_new', 'MAPE', self.model.name, self.model.name + '_MAPE_epoch' + str(epoch) + '_MAPE' + str(self.MAPE) + '.hdf5'))
 
 
-class SaveModelOnMSE(keras.callbacks.Callback):
+class SaveModelOnMAPE_2(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs={}):
+        self.MAPE = round(logs.get('val_loss'), 3)
+        if self.MAPE < 30 or 1:
+            self.model.save_weights(os.path.join('weights_new', 'MAPE', self.model.name, self.model.name + '_MAPE_epoch' + str(epoch+60) + '_MAPE' + str(self.MAPE) + '.hdf5'))
+
+
+class SaveModelOnMSE_1(keras.callbacks.Callback):
+    def __init__(self, idx_test_set):
+        self.idx_test_set = idx_test_set
     def on_epoch_end(self, epoch, logs={}):
         self.MSE = round(logs.get('val_loss'), 3)
         if self.MSE < 2000 or 1:
-            self.model.save_weights(os.path.join('weights_new', self.model.name, self.model.name + '_MSE_epoch' + str(epoch) + '_MSE' + str(self.MSE) + '.hdf5'))
+            self.model.save_weights(os.path.join('weights_new', 'MSE', self.model.name, 'Test_set_{}'.format(self.idx_test_set), self.model.name + '_MSE_epoch' + str(epoch) + '_MSE' + str(self.MSE) + '.hdf5'))
 
 
-class SaveModelOnMAE(keras.callbacks.Callback):
+class SaveModelOnMSE_2(keras.callbacks.Callback):
+    def __init__(self, idx_test_set):
+        self.idx_test_set = idx_test_set
+    def on_epoch_end(self, epoch, logs={}):
+        self.MSE = round(logs.get('val_loss'), 3)
+        if self.MSE < 2000 or 1:
+            self.model.save_weights(os.path.join('weights_new', 'MSE', self.model.name, 'Test_set_{}'.format(self.idx_test_set), self.model.name + '_MSE_epoch' + str(epoch+60) + '_MSE' + str(self.MSE) + '.hdf5'))
+
+
+class SaveModelOnMAE_1(keras.callbacks.Callback):
+    def __init__(self, idx_test_set):
+        self.idx_test_set = idx_test_set
     def on_epoch_end(self, epoch, logs={}):
         self.MAE = round(logs.get('val_loss'), 3)
         if self.MAE < 40 or 1:
-            self.model.save_weights(os.path.join('weights_new', self.model.name, self.model.name + '_MAE_epoch' + str(epoch) + '_MAE' + str(self.MAE) + '.hdf5'))
+            self.model.save_weights(os.path.join('weights_new', 'MAE', self.model.name, 'Test_set_{}'.format(self.idx_test_set), self.model.name + '_MAE_epoch' + str(epoch) + '_MAE' + str(self.MAE) + '.hdf5'))
+
+
+class SaveModelOnMAE_2(keras.callbacks.Callback):
+    def __init__(self, idx_test_set):
+        self.idx_test_set = idx_test_set
+    def on_epoch_end(self, epoch, logs={}):
+        self.MAE = round(logs.get('val_loss'), 3)
+        if self.MAE < 40 or 1:
+            self.model.save_weights(os.path.join('weights_new', 'MAE', self.model.name, 'Test_set_{}'.format(self.idx_test_set), self.model.name + '_MAE_epoch' + str(epoch+60) + '_MAE' + str(self.MAE) + '.hdf5'))
 
 
 
